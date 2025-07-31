@@ -2,13 +2,46 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import norm
 
+# baseline_rate=0.06: Expected conversion rate of the control group (e.g., 6%)
+# effect_size=0.02 Minimum uplift (difference) you want to detect (e.g., +2% improvement)
+# alpha=0.05: Significance level: max p-value you accept for "statistical significance" (typically 0.05)
+# power=0.8:  Statistical power: probability of detecting a true effect if it exists (typically 0.80 or 80%)
+
+# α (alpha) = probability of a Type I error
+# → false positive (rejecting H₀ when it’s actually true)
+# → common value: 0.05
+
+# β (beta) = probability of a Type II error
+# → false negative (failing to reject H₀ when it’s actually false)
+
+# Power = 1 - \beta
+# → probability of correctly detecting a true effect
+
+# beta = 1 - power               # β = 0.20
+# z_beta = norm.ppf(1 - beta)    # 1 - 0.20 = 0.80 → z ≈ 0.84
+
 def run_ab_test(baseline_rate=0.06, effect_size=0.02, alpha=0.05, power=0.8):
     # Step 1: Calculate required sample size
+
     z_alpha = norm.ppf(1 - alpha)
+    # z_alpha: z-score corresponding to the chosen significance level (α)
+    # For α = 0.05, this gives z ≈ 1.645 (one-tailed), or 1.96 (two-tailed)
+
     z_beta = norm.ppf(power)
+    # z_beta: z-score corresponding to the desired statistical power (1 - β)
+    # For power = 0.80, this gives z ≈ 0.84
+
     pooled_prob = baseline_rate
+    # pooled_prob: the expected conversion rate under the null hypothesis (i.e., in control group)
+
     std_dev = np.sqrt(2 * pooled_prob * (1 - pooled_prob))
+    # std_dev: combined standard deviation assuming equal variances in A and B groups
+    # Multiplied by 2 because we assume equal sample size and binomial distribution in both groups
+
     sample_size = int(np.ceil(((z_alpha + z_beta) * std_dev / effect_size) ** 2))
+    # sample_size: required number of users in each group (A and B)
+    # This formula estimates how many samples are needed to detect the specified effect size
+    # with the chosen significance level and statistical power
 
     # Step 2: Simulate test results
     n_A = n_B = sample_size
@@ -19,12 +52,31 @@ def run_ab_test(baseline_rate=0.06, effect_size=0.02, alpha=0.05, power=0.8):
     uplift = p_B - p_A
 
     # Step 3: Statistical analysis
+
+    # SE (Standard Error) of the difference in proportions
+    # This quantifies the uncertainty in the estimated difference (uplift)
+    # Formula: sqrt( (p1*(1-p1)/n1) + (p2*(1-p2)/n2) )
     SE = np.sqrt((p_A * (1 - p_A)) / n_A + (p_B * (1 - p_B)) / n_B)
+
+    # z-score: standardized value of the observed difference (uplift)
+    # This tells us how many standard errors away the observed result is from "no difference"
     z = uplift / SE
-    p_value = 1 - norm.cdf(z)
+
+    # p-value (one-tailed): probability of observing this z or greater, assuming null hypothesis is true
+    # This evaluates whether the observed uplift is statistically significant
+    p_value = 1 - norm.cdf(z)  # one-tailed test: testing if B > A
+
+    # z_crit: critical z-value for a 95% confidence interval (two-tailed)
+    # 0.975 corresponds to the upper 97.5% cutoff (used to capture middle 95%)
     z_crit = norm.ppf(0.975)
+
+    # Confidence interval: range of plausible values for the true uplift
+    # CI = observed uplift ± margin of error
     ci_lower = uplift - z_crit * SE
     ci_upper = uplift + z_crit * SE
+
+    # Decision rule: is the result statistically significant?
+    # If p-value < alpha (e.g. 0.05), we reject the null hypothesis
     significant = p_value < alpha
 
     # Step 4: Visualization
